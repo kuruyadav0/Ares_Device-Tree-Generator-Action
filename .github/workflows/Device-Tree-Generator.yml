@@ -1,0 +1,135 @@
+name: Ares-Device-Tree-Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      DEVICE_IMG:
+        description: '(.img) file link'
+        required: true
+        default: 'https://github.com/abrohim0786/OrangeFox-Recovery-Builder-2025/releases/download/16670367505/boot.img'
+      DEVICE_BRANCH:
+        description: 'Your device branch name (Optional)'
+        required: true
+        default: 'android-12.1'
+      EMPTY_REPO:
+        description: 'your empty repo name on github (must match your actual repo, e.g., device_xiaomi_ares)'
+        required: true
+        default: 'device_xiaomi_ares'
+      COMMIT_MESSAGE:
+        description: 'your commit message (Optional)'
+        required: true
+        default: 'TWRP device tree Xiaomi Redmi K40 Gaming Poco F3GT'
+      PUSH_GITHUB:
+        description: 'Push to GitHub Repository.'
+        type: boolean
+        required: true
+        default: false
+      RELEASE_FILE:
+        description: 'Upload file to GitHub Release too.'
+        type: boolean
+        required: true
+        default: true
+
+jobs:
+  build:
+    name: Device Tree Generator by ${{ github.actor }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      PUSH_TOKEN: ${{ secrets.MY_GH_PAT }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BOT_TOKEN: "1351985416:AAHyrTEyDg3UGercWTeTucuHyF_P4snHLLI"
+      CHAT_ID: "-1001841621465"
+      TG_USER: "@abrohim786"
+    steps:
+    - name: Set Build Start Timestamp
+      run: |
+        echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Getting tools ready 
+      run: |
+        pip3 install twrpdtgen 
+        sudo apt-get install -y cpio zip
+
+    - name: Downloading .img file
+      run: |
+        wget ${{ github.event.inputs.DEVICE_IMG }}
+        if [ -f ./recovery.img ]; then
+            echo "RECOVERY_TYPE=recovery" >> $GITHUB_ENV
+        elif [ -f ./boot.img ]; then
+            echo "RECOVERY_TYPE=boot" >> $GITHUB_ENV
+        elif [ -f ./vendor_boot.img ]; then
+            echo "RECOVERY_TYPE=vendor_boot" >> $GITHUB_ENV
+        else
+            echo "No Recovery file found!"
+            exit 1
+        fi
+        
+    - name: Generating Device tree
+      run: |
+        python3 -m twrpdtgen ./${{ env.RECOVERY_TYPE }}.img 
+        
+    - name: Set Build Date 
+      run: |
+        echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
+
+    - name: getting device information 
+      run: |
+        mv ./output/ device
+        DEVICE_PATH=$(find device -type f \( -name "Android.mk" -o -name "BoardConfig.mk" \) | head -n 1)
+        if [ -z "$DEVICE_PATH" ]; then
+          DEVICE_DIR=$(find device -type d | sort | tail -n 1)
+        else
+          DEVICE_DIR=$(dirname "$DEVICE_PATH")
+        fi
+        echo "DEVICE_DIR=$DEVICE_DIR" >> $GITHUB_ENV
+        DEVICE_ID=$(basename "$(dirname "$DEVICE_DIR")")
+        DEVICE_IDD=$(basename "$DEVICE_DIR")
+        echo "DEVICE_ID=$DEVICE_ID" >> $GITHUB_ENV
+        echo "DEVICE_IDD=$DEVICE_IDD" >> $GITHUB_ENV
+
+    - name: Add to Zip
+      run: |
+        zip -r ${{ env.DEVICE_ID }}_${{ env.DEVICE_IDD }}_tree.zip ./device/
+          
+    - name: Release
+      if: github.event.inputs.RELEASE_FILE == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ env.DEVICE_ID }}_${{ env.DEVICE_IDD }}_tree.zip
+        name: ${{ env.DEVICE_ID }} ${{ env.DEVICE_IDD }} device tree // ${{ env.BUILD_DATE }}
+        tag_name: ${{ github.run_id }}
+        body: Automated device tree release for ${{ env.DEVICE_ID }} ${{ env.DEVICE_IDD }} on ${{ env.BUILD_DATE }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push to GitHub
+      if: github.event.inputs.PUSH_GITHUB == 'true'
+      run: |
+        git config --global user.email "callofduty.pubg786@gmail.com"
+        git config --global user.name "abrohim0786"
+        cd "$DEVICE_DIR" || exit 1
+        git init
+        git add .
+        git commit -m "${{ github.event.inputs.COMMIT_MESSAGE }}"
+        git branch -M ${{ github.event.inputs.DEVICE_BRANCH }}
+        git remote add origin https://${{ github.actor }}:${{ env.PUSH_TOKEN }}@github.com/${{ github.actor }}/${{ github.event.inputs.EMPTY_REPO }}.git
+        git push -u origin ${{ github.event.inputs.DEVICE_BRANCH }}
+
+    # ========== PRO LEVEL FEATURE: TELEGRAM NOTIFICATION ==========
+    - name: Send Telegram Notification (Pro Level)
+      if: always()
+      env:
+        BOT_TOKEN: ${{ env.BOT_TOKEN }}
+        CHAT_ID: ${{ env.CHAT_ID }}
+        TG_USER: ${{ env.TG_USER }}
+        BUILD_START: ${{ env.BUILD_START }}
+        BUILD_DATE: ${{ env.BUILD_DATE }}
+      run: |
+        MESSAGE="✅ Device tree build completed by ${TG_USER} (${{ github.actor }}) on ${BUILD_DATE}.\nRepository: ${{ github.repository }}\nWorkflow: ${{ github.workflow }}\nCommit: ${{ github.sha }}\nBuild Start (epoch): ${BUILD_START}"
+        curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+          -d chat_id="${CHAT_ID}" \
+          -d text="${MESSAGE}"
