@@ -6,7 +6,7 @@ on:
       DEVICE_IMG:
         description: '(.img) file link'
         required: true
-        default: 'https://github.com/abrohim0786/OrangeFox-Recovery-Builder-2025/releases/download/16670367505/boot.img'
+        default: 'https://github.com/kuruyadav0/boot/blob/main/vendor_boot.img'
       DEVICE_BRANCH:
         description: 'Your device branch name (Optional)'
         required: true
@@ -18,7 +18,7 @@ on:
       COMMIT_MESSAGE:
         description: 'your commit message (Optional)'
         required: true
-        default: 'TWRP device tree Xiaomi Redmi K40 Gaming Poco F3GT'
+        default: 'TWRP device tree'
       PUSH_GITHUB:
         description: 'Push to GitHub Repository.'
         type: boolean
